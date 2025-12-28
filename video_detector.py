@@ -1,37 +1,42 @@
 import cv2
-from PIL import Image
-from model import analyze_image
+import numpy as np
+import tempfile
 
-def analyze_video(video_path):
+def analyze_video(video_bytes):
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as tmp:
+        tmp.write(video_bytes.read())
+        video_path = tmp.name
+
     cap = cv2.VideoCapture(video_path)
+    frame_scores = []
+
     frame_count = 0
-    ai_votes = 0
-    reasons = set()
-
-    fps = int(cap.get(cv2.CAP_PROP_FPS))
-    step = max(1, fps)
-
-    while cap.isOpened():
+    while cap.isOpened() and frame_count < 20:
         ret, frame = cap.read()
         if not ret:
             break
 
-        if frame_count % step == 0:
-            img = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
-            result = analyze_image(img)
-
-            if result["ai_generated"]:
-                ai_votes += 1
-                reasons.update(result["reasons"])
-
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        lap = cv2.Laplacian(gray, cv2.CV_64F).var()
+        frame_scores.append(lap)
         frame_count += 1
 
     cap.release()
 
-    ai_ratio = ai_votes / max(1, frame_count // step)
+    consistency = np.std(frame_scores)
+    avg_noise = np.mean(frame_scores)
+
+    is_ai = consistency < 15 or avg_noise < 50
+
+    reasons = []
+    if consistency < 15:
+        reasons.append("Low temporal noise variation")
+    if avg_noise < 50:
+        reasons.append("Over-smooth frames")
 
     return {
-        "ai_generated": ai_ratio > 0.5,
-        "confidence": int(ai_ratio * 100),
-        "reasons": list(reasons)
+        "ai_generated": is_ai,
+        "confidence": min(90, int(100 - consistency)),
+        "reasons": reasons or ["Natural temporal variations detected"]
     }
+
