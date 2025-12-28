@@ -1,25 +1,19 @@
 from fastapi import FastAPI, UploadFile, File
-from fastapi.middleware.cors import CORSMiddleware
-from PIL import Image
-import io
-from model import analyze_image
+from image_detector import analyze_image
+from video_detector import analyze_video
 
-app = FastAPI()
+app = FastAPI(title="AI Generated Media Detector")
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-@app.post("/detect")
-async def detect(file: UploadFile = File(...)):
-    image_bytes = await file.read()
-    image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
-
-    result = analyze_image(image)
-    return result
 @app.get("/")
-def home():
-    return {"status": "Backend running"}
+def root():
+    return {"status": "AI Detector API running"}
+
+@app.post("/detect/image")
+async def detect_image(file: UploadFile = File(...)):
+    result = analyze_image(file.file)
+    return result
+
+@app.post("/detect/video")
+async def detect_video(file: UploadFile = File(...)):
+    result = analyze_video(file.file)
+    return result
